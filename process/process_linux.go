@@ -71,7 +71,8 @@ func (m MemoryMapsStat) String() string {
 // if the process does not exist.
 func NewProcess(pid int32) (*Process, error) {
 	p := &Process{
-		Pid: int32(pid),
+		Pid:  int32(pid),
+		gone: false,
 	}
 	file, err := os.Open(common.HostProc(strconv.Itoa(int(p.Pid))))
 	defer file.Close()
@@ -548,7 +549,26 @@ func (p *Process) IsRunning() (bool, error) {
 }
 
 func (p *Process) IsRunningWithContext(ctx context.Context) (bool, error) {
-	return true, common.ErrNotImplementedError
+	if p.gone == true {
+		return false, nil
+	}
+
+	comparedProcess, err := NewProcess(p.Pid)
+
+	if err != nil {
+		return true, err
+	}
+
+	status, _ := comparedProcess.Status()
+
+	if status == "Z" {
+		return true, nil
+	}
+
+	fmt.Println(p)
+	fmt.Println(comparedProcess)
+	fmt.Println(p == comparedProcess)
+	return (p == comparedProcess), nil
 }
 
 // MemoryMaps get memory maps from /proc/(pid)/smaps

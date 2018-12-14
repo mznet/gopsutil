@@ -28,6 +28,7 @@ type Process struct {
 	numThreads     int32
 	memInfo        *MemoryInfoStat
 	sigInfo        *SignalInfoStat
+	gone           bool
 
 	lastCPUTimes *cpu.TimesStat
 	lastCPUTime  time.Time
