@@ -4,8 +4,10 @@ package mem
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"strings"
+	"os"
 
 	"github.com/shirou/gopsutil/internal/common"
 	"golang.org/x/sys/unix"
@@ -102,9 +104,7 @@ func VirtualMemoryWithContext(ctx context.Context) (*VirtualMemoryStat, error) {
 
 	ret.Cached += ret.SReclaimable
 
-	if !memavail {
-		ret.Available = ret.Free + ret.Buffers + ret.Cached
-	}
+	ret.Available = calcuateAvailVmem(ret)
 	ret.Used = ret.Total - ret.Free - ret.Buffers - ret.Cached
 	ret.UsedPercent = float64(ret.Used) / float64(ret.Total) * 100.0
 
@@ -155,4 +155,33 @@ func SwapMemoryWithContext(ctx context.Context) (*SwapMemoryStat, error) {
 		}
 	}
 	return ret, nil
+}
+
+func calcuateAvailVmem(ret *VirtualMemoryStat) uint64 {
+	var watermarkLow uint64
+	fn := common.HostProc("zoneinfo")
+	lines, _ := common.ReadLines(fn)
+	pagesize := uint64(os.Getpagesize())
+	watermarkLow = 0
+
+	for _, line := range lines {
+		fields := strings.Fields(line)
+
+		if strings.HasPrefix(fields[0], "low") {
+			v, _ := strconv.ParseInt(fields[1], 10, 0)
+			println(v)
+			watermarkLow += 0
+		}
+	}
+
+	watermarkLow *= pagesize
+
+	availMemory := ret.Free - watermarkLow
+	pageCache := ret.Active + ret.Inactive
+	pageCache -= uint64(math.Min(float64(pageCache / 2), float64(watermarkLow)))
+	availMemory += pageCache
+	availMemory += ret.SReclaimable - uint64(math.Min(float64(ret.SReclaimable / 2.0), float64(watermarkLow)))
+
+
+	return availMemory
 }
