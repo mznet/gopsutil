@@ -5,9 +5,9 @@ package mem
 import (
 	"context"
 	"math"
+	"os"
 	"strconv"
 	"strings"
-	"os"
 
 	"github.com/shirou/gopsutil/internal/common"
 	"golang.org/x/sys/unix"
@@ -104,7 +104,10 @@ func VirtualMemoryWithContext(ctx context.Context) (*VirtualMemoryStat, error) {
 
 	ret.Cached += ret.SReclaimable
 
-	ret.Available = calcuateAvailVmem(ret)
+	if !memavail {
+		ret.Available = calcuateAvailVmem(ret)
+	}
+
 	ret.Used = ret.Total - ret.Free - ret.Buffers - ret.Cached
 	ret.UsedPercent = float64(ret.Used) / float64(ret.Total) * 100.0
 
@@ -168,9 +171,13 @@ func calcuateAvailVmem(ret *VirtualMemoryStat) uint64 {
 		fields := strings.Fields(line)
 
 		if strings.HasPrefix(fields[0], "low") {
-			v, _ := strconv.ParseInt(fields[1], 10, 0)
-			println(v)
-			watermarkLow += 0
+			lowValue, err := strconv.ParseInt(fields[1], 10, 0)
+
+			if err != nil {
+				lowValue = 0
+			}
+
+			watermarkLow += uint64(lowValue)
 		}
 	}
 
@@ -178,10 +185,9 @@ func calcuateAvailVmem(ret *VirtualMemoryStat) uint64 {
 
 	availMemory := ret.Free - watermarkLow
 	pageCache := ret.Active + ret.Inactive
-	pageCache -= uint64(math.Min(float64(pageCache / 2), float64(watermarkLow)))
+	pageCache -= uint64(math.Min(float64(pageCache/2), float64(watermarkLow)))
 	availMemory += pageCache
-	availMemory += ret.SReclaimable - uint64(math.Min(float64(ret.SReclaimable / 2.0), float64(watermarkLow)))
-
+	availMemory += ret.SReclaimable - uint64(math.Min(float64(ret.SReclaimable/2.0), float64(watermarkLow)))
 
 	return availMemory
 }
